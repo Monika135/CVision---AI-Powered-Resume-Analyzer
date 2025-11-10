@@ -1,0 +1,485 @@
+{% extends "analyser/base.html" %}
+{% block content %}
+<div class="container mt-5">
+  <div class="card shadow-lg p-4 rounded-4">
+    <h2 class="text-center mb-4 text-primary fw-bold">AI-Powered Resume Analyzer</h2>
+
+    <form id="analyzeForm" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label for="resume_file" class="form-label fw-semibold">
+          Upload Resume (PDF or DOCX)
+        </label>
+        <input class="form-control" type="file" id="resume_file" accept=".pdf,.docx" />
+      </div>
+
+      <div class="text-center fw-bold text-muted my-2">— OR —</div>
+
+      <div class="mb-3">
+        <label for="resume_text" class="form-label fw-semibold">Paste Resume Text</label>
+        <textarea
+          id="resume_text"
+          class="form-control"
+          placeholder="Paste your resume here..."
+          rows="5"
+        ></textarea>
+      </div>
+
+      <div class="mb-3">
+        <label for="job_description" class="form-label fw-semibold">Job Description</label>
+        <textarea
+          id="job_description"
+          class="form-control"
+          placeholder="Paste job description here..."
+          rows="5"
+        ></textarea>
+      </div>
+
+      <div class="d-flex justify-content-between">
+        <button type="submit" class="btn btn-primary btn-lg fw-semibold">
+          <i class="bi bi-cpu"></i> Analyze Resume
+        </button>
+
+        <!-- History Button -->
+        <button
+          type="button"
+          id="openHistory"
+          class="btn btn-outline-secondary btn-lg fw-semibold"
+        >
+          <i class="bi bi-clock-history"></i> View History
+        </button>
+      </div>
+    </form>
+
+    <!-- Result Section -->
+    <div id="result" class="mt-5"></div>
+  </div>
+</div>
+
+<div
+  class="modal"
+  id="historyModal"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="historyModalLabel"
+  aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content rounded-4">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title fw-bold" id="historyModalLabel">
+          <i class="bi bi-clock-history"></i> Previous Analyses
+        </h5>
+        <button
+          type="button"
+          class="btn-close btn-close-white"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+      <div class="modal-body" id="historyContent">
+        <div class="text-center text-muted">Loading history...</div>
+      </div>
+      <div class="modal-footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-bs-dismiss="modal">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap CSS + Icons -->
+<link
+  href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+  rel="stylesheet"
+/>
+<link
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css"
+  rel="stylesheet"
+/>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Custom Styles -->
+<style>
+  .alert-dismissible {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050;
+    min-width: 300px;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    animation: slideIn 0.5s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  .hover-shadow:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15) !important;
+    transition: all 0.3s ease;
+  }
+
+  .history-container {
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
+  .card.hover-shadow {
+    transition: all 0.3s ease;
+  }
+
+  .card.hover-shadow:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15) !important;
+  }
+
+  .badge {
+    font-weight: 500;
+    padding: 0.5em 0.7em;
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    // ========== Notification Permission ==========
+    if ("Notification" in window && Notification.permission !== "denied") {
+      Notification.requestPermission();
+    }
+
+    // ========== History Modal Handling ==========
+    const historyModalEl = document.getElementById("historyModal");
+    const historyModal = new bootstrap.Modal(historyModalEl);
+    const historyContent = document.getElementById("historyContent");
+    const openHistoryBtn = document.getElementById("openHistory");
+    let lastFocusedElement = null;
+
+    openHistoryBtn.addEventListener("click", async () => {
+      lastFocusedElement = document.activeElement;
+      lastFocusedElement.blur(); //Prevent aria-hidden focus warning
+      await loadHistory(historyContent);
+      historyModal.show();
+    });
+
+    historyModalEl.addEventListener("hidden.bs.modal", () => {
+      if (lastFocusedElement) lastFocusedElement.focus();
+    });
+
+
+    async function loadHistory(historyContent) {
+      try {
+        // Show loading spinner
+        historyContent.innerHTML = `
+          <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading history...</p>
+          </div>
+        `;
+
+        const token = localStorage.getItem("access");
+        if (!token) throw new Error("No authentication token found");
+
+        const response = await fetch("/resume_analysis/api/analyses_history/", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("History data received:", data);
+
+        const results = Array.isArray(data.results) ? data.results : data;
+
+        if (!results || results.length === 0) {
+          historyContent.innerHTML = `
+            <div class="text-center py-5">
+              <i class="bi bi-inbox-fill h1 text-muted"></i>
+              <p class="mt-3 text-muted">No analysis history found</p>
+            </div>
+          `;
+          return;
+        }
+
+        // Render history items
+        const historyItems = results.map(item => `
+          <div class="card mb-3 hover-shadow">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <h6 class="card-title text-primary mb-0">
+                  Analysis #${item.id}
+                </h6>
+                <span class="badge bg-${getScoreBadgeColor(item.ats_score)} ms-2">
+                  Score: ${item.ats_score || 'N/A'}%
+                </span>
+              </div>
+
+              <div class="small text-muted mb-3">
+                ${formatDate(item.created_at)}
+              </div>
+
+              <div class="mb-2">
+                <strong>Matched Keywords:</strong><br>
+                <div class="mt-1">
+                  ${renderKeywords(item.matched_keywords, 'success')}
+                </div>
+              </div>
+
+              <div class="mb-2">
+                <strong>Missing Keywords:</strong><br>
+                <div class="mt-1">
+                  ${renderKeywords(item.missing_keywords, 'danger')}
+                </div>
+              </div>
+
+              <div class="mb-2">
+                <strong>Suggestions:</strong><br>
+                <div class="mt-1">
+                  ${renderKeywords(item.suggestions, 'secondary')}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        `).join('');
+
+        historyContent.innerHTML = `
+          <div class="history-container">
+            ${historyItems}
+          </div>
+        `;
+
+      } catch (error) {
+        console.error("History loading error:", error);
+        historyContent.innerHTML = `
+          <div class="alert alert-danger m-3">
+            <h5 class="alert-heading">
+              <i class="bi bi-exclamation-triangle"></i> Error Loading History
+            </h5>
+            <p class="mb-0">${error.message}</p>
+            <button 
+              class="btn btn-outline-danger btn-sm mt-3" 
+              onclick="loadHistory(historyContent)"
+            >
+              <i class="bi bi-arrow-clockwise"></i> Try Again
+            </button>
+          </div>
+        `;
+      }
+    }
+
+    // Reload when modal opens
+    historyModalEl.addEventListener("shown.bs.modal", () => {
+      loadHistory(historyContent);
+    });
+
+    // Helper functions
+    function renderKeywords(keywords, type) {
+      if (!Array.isArray(keywords) || keywords.length === 0) {
+        return '<span class="text-muted">None</span>';
+      }
+      return keywords
+        .map(keyword => `<span class="badge bg-${type} me-1 mb-1">${keyword}</span>`)
+        .join('');
+    }
+
+    function getScoreBadgeColor(score) {
+      if (!score) return 'secondary';
+      if (score >= 80) return 'success';
+      if (score >= 60) return 'warning';
+      return 'danger';
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return '';
+      const options = {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      };
+      return new Date(dateString).toLocaleDateString('en-US', options);
+    }
+
+    // ========== Resume Analysis Handling ==========
+    const analyzeForm = document.getElementById("analyzeForm");
+    const resultContainer = document.getElementById("result");
+    const POLL_INTERVAL_MS = 10000;
+    const MAX_POLLS = 18;
+    let pollHandle = null;
+
+    const renderAnalysis = (data) => {
+      const matched = Array.isArray(data.matched_keywords) ? data.matched_keywords : [];
+      const missing = Array.isArray(data.missing_keywords) ? data.missing_keywords : [];
+      const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+      const score = typeof data.ats_score === "number" ? data.ats_score : "N/A";
+
+      resultContainer.innerHTML = `
+        <div class="alert alert-success p-4 rounded-4 shadow-sm">
+          <h4 class="fw-bold text-success">Analysis Result</h4>
+          <p><strong>Score:</strong> ${score}%</p>
+          <p><strong>Matched Keywords:</strong> ${matched.join(", ") || "None"}</p>
+          <p><strong>Missing Keywords:</strong> ${missing.join(", ") || "None"}</p>
+          <p><strong>Suggestions:</strong> ${suggestions.join(", ") || "None"}</p>
+        </div>
+      `;
+    };
+
+    // Popup notification
+    function showPopupNotification(message) {
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("Analysis Complete", { body: message });
+      }
+
+      const alert = document.createElement("div");
+      alert.className = "alert alert-success alert-dismissible fade show";
+      alert.role = "alert";
+      alert.innerHTML = `
+        <strong>✅ Done!</strong> ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      `;
+      document.body.appendChild(alert);
+      setTimeout(() => alert.remove(), 5000);
+    }
+
+    const startPollingForResult = (analysisId, token) => {
+      let attempts = 0;
+      if (pollHandle) clearInterval(pollHandle);
+
+      pollHandle = setInterval(async () => {
+        attempts += 1;
+        try {
+          const detailRes = await fetch(
+            `/resume_analysis/api/analyses_detail/${analysisId}/`,
+            { headers: { Authorization: "Bearer " + token } }
+          );
+
+          if (!detailRes.ok) throw new Error(`Status ${detailRes.status}`);
+          const detailData = await detailRes.json();
+
+          if (detailData.ats_score !== null && detailData.ats_score !== undefined) {
+            clearInterval(pollHandle);
+            pollHandle = null;
+            renderAnalysis(detailData);
+            showPopupNotification("Your resume analysis is complete!");
+          } else if (attempts >= MAX_POLLS) {
+            clearInterval(pollHandle);
+            pollHandle = null;
+            resultContainer.innerHTML = `
+              <div class="alert alert-warning p-4 rounded-4 shadow-sm">
+                <h4 class="fw-bold text-warning">Still Processing</h4>
+                <p>Your analysis is taking longer than expected. Please refresh later or check your history.</p>
+              </div>
+            `;
+          }
+        } catch (err) {
+          clearInterval(pollHandle);
+          pollHandle = null;
+          resultContainer.innerHTML = `
+            <div class="alert alert-danger p-4 rounded-4 shadow-sm">
+              <h4 class="fw-bold text-danger">Unable to fetch result</h4>
+              <p>${err.message}</p>
+            </div>
+          `;
+        }
+      }, POLL_INTERVAL_MS);
+    };
+
+    // Form submission
+    analyzeForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const token = localStorage.getItem("access");
+      if (!token) {
+        alert("Please log in first");
+        window.location.href = "/users/";
+        return;
+      }
+
+      const resumeFile = document.getElementById("resume_file").files[0];
+      const resumeText = document.getElementById("resume_text").value.trim();
+      const jobDescription = document.getElementById("job_description").value.trim();
+
+      if (!resumeFile && !resumeText) {
+        alert("Please upload a resume file or paste resume text");
+        return;
+      }
+
+      if (!jobDescription) {
+        alert("Please enter a job description");
+        return;
+      }
+
+      const formData = new FormData();
+      if (resumeFile) formData.append("file", resumeFile);
+      if (resumeText) formData.append("resume_text", resumeText);
+      formData.append("job_description", jobDescription);
+
+      try {
+        const res = await fetch("/resume_analysis/api/analyze_resume/", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token },
+          body: formData,
+        });
+
+        if (!res.ok) {
+          let errorMsg = "Something went wrong";
+          try {
+            const errorData = await res.json();
+            errorMsg = errorData.error || errorData.detail || errorMsg;
+          } catch {
+            errorMsg = `Error: ${res.status} ${res.statusText}`;
+          }
+          resultContainer.innerHTML = `<div class="alert alert-danger">${errorMsg}</div>`;
+          return;
+        }
+
+        const data = await res.json();
+
+        if (data.task_id) {
+          resultContainer.innerHTML = `
+            <div class="alert alert-info p-4 rounded-4 shadow-sm">
+              <h4 class="fw-bold text-primary">Analysis Started</h4>
+              <p>Your resume analysis is running in the background.</p>
+              <p><strong>Analysis ID:</strong> ${data.analysis_id}</p>
+              <p>You can also revisit your history later.</p>
+            </div>
+          `;
+          startPollingForResult(data.analysis_id, token);
+          return;
+        }
+
+        renderAnalysis(data);
+      } catch (err) {
+        resultContainer.innerHTML = `<div class="alert alert-danger">Network error: ${err.message}</div>`;
+      }
+    });
+  });
+
+  function viewResult(id) {
+    const token = localStorage.getItem("access");
+    if (!token) {
+      alert("Please log in to view details");
+      return;
+    }
+    window.location.href = `/resume_analysis/api/analyses_detail/${id}/`;
+  }
+</script>
+{% endblock %}

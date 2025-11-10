@@ -1,0 +1,86 @@
+{% extends "analyser/base.html" %}
+{% block content %}
+<style>
+  .hero-section {
+    background: linear-gradient(135deg, #0d6efd, #6610f2);
+    color: #fff;
+    border-radius: 20px;
+    padding: 60px 30px;
+    text-align: center;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+  }
+  .hero-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+  }
+  .hero-subtitle {
+    font-size: 1.2rem;
+    color: #e0e0e0;
+    margin-bottom: 30px;
+  }
+  .highlight {
+    color: #ffc107;
+    font-weight: 600;
+  }
+  .feature-card {
+    border: none;
+    border-radius: 15px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  }
+  .feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  }
+  .icon-circle {
+    width: 60px;
+    height: 60px;
+    background-color: #0d6efd;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 15px;
+    color: white;
+    font-size: 28px;
+  }
+</style>
+
+<div class="container mt-5 mb-5">
+  <div class="hero-section mb-5">
+    <h1 class="hero-title">✨ AI-Powered ATS Resume Scanner</h1>
+    <p class="hero-subtitle">
+      Transform your resume into an <span class="highlight">ATS-optimized masterpiece</span>.  
+      Our smart analyzer compares your resume with the provided Job Description (JD)  
+      and reveals how well you match — plus what to improve.
+    </p>
+  </div>
+
+  <div class="row text-center">
+    <div class="col-md-4 mb-4">
+      <div class="card feature-card p-4">
+        <div class="icon-circle"><i class="bi bi-graph-up"></i></div>
+        <h5 class="fw-bold">Keyword Match Score</h5>
+        <p class="text-muted">Discover how well your resume aligns with the job description keywords.</p>
+      </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+      <div class="card feature-card p-4">
+        <div class="icon-circle"><i class="bi bi-lightbulb"></i></div>
+        <h5 class="fw-bold">AI Suggestions</h5>
+        <p class="text-muted">Get personalized recommendations to boost your resume’s ATS ranking.</p>
+      </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+      <div class="card feature-card p-4">
+        <div class="icon-circle"><i class="bi bi-stars"></i></div>
+        <h5 class="fw-bold">Job Fit Insights</h5>
+        <p class="text-muted">Understand your strengths, skill gaps, and where you stand for the job role.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
